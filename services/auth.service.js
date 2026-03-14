@@ -1,19 +1,68 @@
+import { createHmac, randomBytes } from "crypto";
+import { JWT_SECRET, signToken } from "../lib/auth-token.js";
 import { User } from "../models/user.model.js";
+import { hash } from "../utils/hash.js";
 
 export class AuthService {
-  static async signIn(data) {
-    const { mobile } = data;
+  static async signUp(data) {
+    const {
+      firstName,
+      lastName,
+      email,
+      mobile,
+      skill,
+      password,
+      role,
+      company,
+    } = data;
+    const salt = randomBytes(16).toString("hex");
+    console.log("sign updata:", data);
 
-    let user = await User.findOne({ mobile });
+    try {
+      const user = await User.create({
+        firstName,
+        lastName,
+        email,
+        mobile,
+        skill,
+        password: hash(password, salt),
+        salt,
+        role,
+        company,
+      });
+
+      const token = signToken({ id: user.id, role: user.role });
+      return token;
+    } catch (err) {
+      console.error("Error during sign up:", err);
+      throw err;
+    }
+  }
+
+  static async signIn(data) {
+    const { userId, password } = data;
+
+    let user = await User.findOne({ email: userId });
 
     if (!user) {
-      try {
-        user = await User.create({ mobile });
-      } catch (err) {
-        throw err;
-      }
+      user = await User.findOne({ mobile: userId });
     }
 
-    return { loggedIn: true, user };
+    if (!user || hash(password, user.salt) !== user.password) {
+      throw new AppError("User Id or password is wrong!");
+    }
+
+    const token = signToken({ id: user.id, role: user.role });
+    console.log(token);
+    return token;
+  }
+
+  static async validateToken(token) {
+    try {
+      jsonwebtoken.verify(token, JWT_SECRET);
+      return true;
+    } catch (err) {
+      return false;
+    }
   }
 }
